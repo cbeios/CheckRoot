@@ -3,9 +3,19 @@
 
 std::string getJailbreakStatus() 
 {
-    // Check for non-jailbroken device first
-    bool isJailbroken = false;
-    // Common jailbreak files and directories
+    //use static variable to cache the result
+    static std::string cachedStatus;
+    static bool isChecked = false;
+
+    //return cached result if already checked
+    if (isChecked) {
+        return cachedStatus;
+    }
+
+    //mark as checked to prevent re-running
+    isChecked = true;
+
+    //common jailbreak files and directories
     const char* jailbreakPaths[] = 
     {
         "/Applications/Cydia.app",
@@ -17,7 +27,8 @@ std::string getJailbreakStatus()
         "/private/var/stash",
         "/private/var/lib/apt"
     };
-    // Rootless jailbreak specific paths
+
+    //rootless jailbreak specific paths
     const char* rootlessPaths[] = 
     {
         "/var/jb",
@@ -25,70 +36,62 @@ std::string getJailbreakStatus()
         "/var/jb/usr/lib",
         "/var/jb/Library/MobileSubstrate/DynamicLibraries"
     };
-    // Roothide specific path
+
+    //roothide specific path
     const char* roothidePath = "/var/jb/.roothide";
-    
-    // Check for jailbreak files
+
+    // Check for common jailbreak files
     for (const char* path : jailbreakPaths) 
     {
         if (access(path, F_OK) == 0) 
         {
-            isJailbroken = true;
-            break;
-        }
-    }
-    if (!isJailbroken) 
-   	{
-        // If no common jailbreak files are found, check for rootless jailbreak
-        for (const char* path : rootlessPaths) 
-        {
-            if (access(path, F_OK) == 0) 
+            // Check if it's roothide
+            if (access(roothidePath, F_OK) == 0) 
             {
-                // Check for roothide specifically
-                if (access(roothidePath, F_OK) == 0) 
-                {
-                    return "Roothide";
-                }
-                return "Rootless";
+                cachedStatus = "Roothide";
+            } else {
+                cachedStatus = "Rootfull";
             }
+            return cachedStatus;
         }
-    } 
-    else 
+    }
+
+    //check for rootless jailbreak
+    for (const char* path : rootlessPaths) 
     {
-        // If jailbreak files are found, check if it's roothide
-        if (access(roothidePath, F_OK) == 0) 
+        if (access(path, F_OK) == 0) 
         {
-            return "Roothide";
+            // Check for roothide specifically
+            if (access(roothidePath, F_OK) == 0) 
+            {
+                cachedStatus = "Roothide";
+            } else {
+                cachedStatus = "Rootless";
+            }
+            return cachedStatus;
         }
-        return "Rootfull";
     }
-    // Check if the app is running in a sandbox (non-jailbroken devices have strict sandbox)
+
+    //check if the app is running in a sandbox (non-jailbroken devices have strict sandbox)
     NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
-    if ([bundlePath containsString:@"/Applications/"] && !isJailbroken) 
+    if ([bundlePath containsString:@"/Applications/"]) 
     {
-        return "Non Root";
+        cachedStatus = "Non Root";
+        return cachedStatus;
     }
-    // Additional check: try to write to a restricted directory
+
+    //additional check: try to write to a restricted directory
     NSString *testPath = @"/private/test_jb.txt";
     NSError *error = nil;
     [@"" writeToFile:testPath atomically:YES encoding:NSUTF8StringEncoding error:&error];
     if (!error) 
     {
-        // If we can write to /private, it's jailbroken
+        //if we can write to /private, it's jailbroken
         unlink([testPath UTF8String]); // Clean up
-        return access(roothidePath, F_OK) == 0 ? "Roothide" : "Rootfull";
+        cachedStatus = (access(roothidePath, F_OK) == 0) ? "Roothide" : "Rootfull";
+    } else {
+        cachedStatus = "Non Root";
     }
-    return "Non Root";
+
+    return cachedStatus;
 }
-
-
-
-//================================================================================//
-
-//Using text in menu
-/*
-std::string statusjb = getJailbreakStatus();
-ImGui::Text("CheckRoot: %s"), statusjb.c_str());
-*/
-
-//================================================================================//
